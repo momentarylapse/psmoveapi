@@ -31,7 +31,7 @@
 
 #include "tracker_helpers.h"
 
-#include "opencv2/imgproc/imgproc_c.h"
+#include "opencv2/opencv.hpp"
 
 void
 th_stats(double *a, int n, double *variance, double *avg)
@@ -56,15 +56,15 @@ th_stats(double *a, int n, double *variance, double *avg)
 }
 
 double
-th_color_avg(CvScalar a)
+th_color_avg(cv::Scalar a)
 {
     return (a.val[0] + a.val[1] + a.val[2]) / 3.;
 }
 
-CvScalar
-th_scalar_add(CvScalar a, CvScalar b)
+cv::Scalar
+th_scalar_add(cv::Scalar a, cv::Scalar b)
 {
-    CvScalar result;
+    cv::Scalar result;
 
     result.val[0] = a.val[0] + b.val[0];
     result.val[1] = a.val[1] + b.val[1];
@@ -74,10 +74,10 @@ th_scalar_add(CvScalar a, CvScalar b)
     return result;
 }
 
-CvScalar
-th_scalar_sub(CvScalar a, CvScalar b)
+cv::Scalar
+th_scalar_sub(cv::Scalar a, cv::Scalar b)
 {
-    CvScalar result;
+    cv::Scalar result;
 
     result.val[0] = a.val[0] - b.val[0];
     result.val[1] = a.val[1] - b.val[1];
@@ -87,10 +87,10 @@ th_scalar_sub(CvScalar a, CvScalar b)
     return result;
 }
 
-CvScalar
-th_scalar_mul(CvScalar a, double b)
+cv::Scalar
+th_scalar_mul(cv::Scalar a, double b)
 {
-    CvScalar result;
+    cv::Scalar result;
 
     result.val[0] = a.val[0] * b;
     result.val[1] = a.val[1] * b;
@@ -100,11 +100,11 @@ th_scalar_mul(CvScalar a, double b)
     return result;
 }
 
-CvScalar
-th_brg2hsv(CvScalar bgr)
+cv::Scalar
+th_brg2hsv(cv::Scalar bgr)
 {
-    static IplImage *img_hsv = NULL;
-    static IplImage *img_bgr = NULL;
+    static cv::Mat *img_hsv = NULL;
+    static cv::Mat *img_bgr = NULL;
 
     /**
      * We use two dummy 1x1 images here, and set/get the color from from these
@@ -113,16 +113,16 @@ th_brg2hsv(CvScalar bgr)
      **/
 
     if (!img_hsv) {
-        img_hsv = cvCreateImage(cvSize(1, 1), IPL_DEPTH_8U, 3);
+        img_hsv = new cv::Mat(cv::Size(1,1), CV_8UC3);
     }
 
     if (!img_bgr) {
-        img_bgr = cvCreateImage(cvSize(1, 1), IPL_DEPTH_8U, 3);
+        img_bgr = new cv::Mat(cv::Size(1,1), CV_8UC3);
     }
 
-    cvSet(img_bgr, bgr, NULL);
-    cvCvtColor(img_bgr, img_hsv, CV_BGR2HSV);
+    *img_bgr = bgr;
+    cvtColor(*img_bgr, *img_hsv, cv::COLOR_BGR2HSV);
 
-    return cvAvg(img_hsv, NULL);
+    return cv::mean(*img_hsv);
 }
 

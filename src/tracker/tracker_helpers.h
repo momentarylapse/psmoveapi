@@ -29,15 +29,15 @@
  **/
 
 
-#include "opencv2/core/core_c.h"
+#include "opencv2/opencv.hpp"
 
 #include "psmove.h"
 
 
 /* Color constants */
-#define TH_COLOR_BLACK cvScalar(0, 0, 0, 0)
-#define TH_COLOR_WHITE cvScalar(255, 255, 255, 0)
-#define TH_COLOR_RED cvScalar(0, 0, 255, 0)
+#define TH_COLOR_BLACK cv::Scalar(0, 0, 0, 0)
+#define TH_COLOR_WHITE cv::Scalar(255, 255, 255, 0)
+#define TH_COLOR_RED cv::Scalar(0, 0, 255, 0)
 
 /* Distance of 2 CvPoints, squared */
 #define th_dist_squared(a, b) (((a).x - (b).x) * \
@@ -64,32 +64,32 @@ th_stats(double *a, int n, double *variance, double *avg);
  * Average over all 3 channels of a color
  **/
 double
-th_color_avg(CvScalar a);
+th_color_avg(cv::Scalar a);
 
 /**
- * Sum of two CvScalar values
+ * Sum of two cv::Scalar values
  **/
-CvScalar
-th_scalar_add(CvScalar a, CvScalar b);
+cv::Scalar
+th_scalar_add(cv::Scalar a, cv::Scalar b);
 
 /**
- * Difference of two CvScalar values
+ * Difference of two cv::Scalar values
  **/
-CvScalar
-th_scalar_sub(CvScalar a, CvScalar b);
+cv::Scalar
+th_scalar_sub(cv::Scalar a, cv::Scalar b);
 
 
 /**
- * Scaled CvScalar by a constant factor
+ * Scaled cv::Scalar by a constant factor
  **/
-CvScalar
-th_scalar_mul(CvScalar a, double b);
+cv::Scalar
+th_scalar_mul(cv::Scalar a, double b);
 
 /**
  * Single-value colorspace conversion: BGR -> HSV
  **/
-CvScalar
-th_brg2hsv(CvScalar bgr);
+cv::Scalar
+th_brg2hsv(cv::Scalar bgr);
 
 #ifdef __cplusplus
 }

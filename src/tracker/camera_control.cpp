@@ -36,6 +36,8 @@
 #include <stdio.h>
 #include <stdint.h>
 
+//#include <opencv2/opencv.hpp>
+
 #include "camera_control_private.h"
 
 void
@@ -141,8 +143,8 @@ void
 camera_control_read_calibration(CameraControl* cc,
         char* intrinsicsFile, char* distortionFile)
 {
-    CvMat *intrinsic = (CvMat*) cvLoad(intrinsicsFile, 0, 0, 0);
-    CvMat *distortion = (CvMat*) cvLoad(distortionFile, 0, 0, 0);
+ /*   CvMat *intrinsic = (CvMat*) cv::imread(intrinsicsFile, 0);
+    CvMat *distortion = (CvMat*) cv::imread(distortionFile, 0);
 
     if (cc->mapx) {
         cvReleaseImage(&cc->mapx);
@@ -165,7 +167,7 @@ camera_control_read_calibration(CameraControl* cc,
         // TODO: Shouldn't we free intrinsic and distortion here?
     } else {
         fprintf(stderr, "Warning: No lens calibration files found.\n");
-    }
+    }*/
 }
 
 IplImage *

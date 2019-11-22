@@ -58,7 +58,7 @@ camera_control_backup_system_settings(CameraControl *cc)
 
     int fd = open_v4l2_device(cc->cameraID);
     if (fd != -1) {
-        struct CameraControlSystemSettings *settings = calloc(1, sizeof(struct CameraControlSystemSettings));
+        CameraControlSystemSettings *settings = (CameraControlSystemSettings*)calloc(1, sizeof(struct CameraControlSystemSettings));
         settings->AutoAEC = v4l2_get_control(fd, V4L2_CID_EXPOSURE_AUTO);
         settings->AutoAGC = v4l2_get_control(fd, V4L2_CID_AUTOGAIN);
         settings->Gain = v4l2_get_control(fd, V4L2_CID_GAIN);

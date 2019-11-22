@@ -28,7 +28,7 @@ ENDIF()
 
 # 1 - OpenCV
 IF(PSMOVE_BUILD_TRACKER)
-    FIND_PACKAGE(OpenCV 3 QUIET)
+    FIND_PACKAGE(OpenCV 4 QUIET)
     IF(OpenCV_FOUND)
         IF ("${OpenCV_LIBS}" STREQUAL "")
             message("OpenCV Libs was empty! Manually setting.")
@@ -58,7 +58,7 @@ IF(PSMOVE_BUILD_TRACKER)
     IF(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
         list(APPEND PSMOVEAPI_TRACKER_PLATFORM_SRC
             ${CMAKE_CURRENT_LIST_DIR}/platform/psmove_osxsupport.m
-            ${CMAKE_CURRENT_LIST_DIR}/platform/camera_control_macosx.c)
+            ${CMAKE_CURRENT_LIST_DIR}/platform/camera_control_macosx.cpp)
         find_library(QUARTZCORE QuartzCore)
         find_library(APPKIT AppKit)
         find_library(QTKIT QTKit)
@@ -79,9 +79,9 @@ IF(PSMOVE_BUILD_TRACKER)
         ENDIF(MINGW)
     ELSE() #Linux
         list(APPEND PSMOVEAPI_TRACKER_PLATFORM_SRC
-            ${CMAKE_CURRENT_LIST_DIR}/platform/psmove_linuxsupport.c
+            ${CMAKE_CURRENT_LIST_DIR}/platform/psmove_linuxsupport.cpp
 			${CMAKE_CURRENT_LIST_DIR}/platform/psmove_linuxsupport.h
-            ${CMAKE_CURRENT_LIST_DIR}/platform/camera_control_linux.c)
+            ${CMAKE_CURRENT_LIST_DIR}/platform/camera_control_linux.cpp)
         list(APPEND PSMOVEAPI_TRACKER_REQUIRED_LIBS v4l2)
     ENDIF()
 ENDIF(PSMOVE_BUILD_TRACKER)

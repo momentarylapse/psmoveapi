@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 2.8.12)
 set(ROOT_DIR ${CMAKE_CURRENT_LIST_DIR}/..)
 include(${ROOT_DIR}/cmake/common.cmake)
 
+set (CMAKE_CXX_STANDARD 14)
+
 # Do all the PSMOVEAPI-only work
 # At the end we will call separate files for tracker and utils
 
