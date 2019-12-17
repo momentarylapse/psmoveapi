@@ -36,6 +36,10 @@
 extern "C" {
 #endif
 
+namespace cv {
+	class Mat;
+}
+
 /* Defines the range of x/y values for the position getting, etc.. */
 #define PSMOVE_TRACKER_DEFAULT_WIDTH 640
 #define PSMOVE_TRACKER_DEFAULT_HEIGHT 480
@@ -112,7 +116,7 @@ typedef struct {
     int calibration_size_std;                   /* [10] maximum standard deviation (in %) of the glowing spheres found during calibration process  */
     int color_mapping_max_age;                  /* [2*60*60] Only re-use color mappings "younger" than this time in seconds  */
     float dimming_factor;                       /* [1.f] dimming factor used on LED RGB values  */
-    
+
     /* Settings for OpenCV image processing for sphere detection */
     int color_hue_filter_range;                 /* [20] +- range of Hue window of the hsv-colorfilter  */
     int color_saturation_filter_range;          /* [85] +- range of Sat window of the hsv-colorfilter  */
@@ -461,7 +465,7 @@ ADDCALL psmove_tracker_get_camera_color(PSMoveTracker *tracker, PSMove *move,
  * blinking calibration. For some use cases, it might be useful to
  * set the color manually (e.g. when the user should be able to select
  * the color in the camera image after lighting changes).
- * 
+ *
  * \param tracker A valid \ref PSMoveTracker handle
  * \param move A valid \ref PSMove handle
  * \param r The red component of the color (0..255)
@@ -553,6 +557,8 @@ ADDCALL psmove_tracker_annotate(PSMoveTracker* tracker);
  **/
 ADDAPI void*
 ADDCALL psmove_tracker_get_frame(PSMoveTracker *tracker);
+ADDAPI cv::Mat
+ADDCALL psmove_tracker_get_frame2(PSMoveTracker *tracker);
 
 /**
  * \brief Get the current camera image as 24-bit RGB data blob
@@ -567,7 +573,7 @@ ADDCALL psmove_tracker_get_frame(PSMoveTracker *tracker);
  * tracker exists.
  *
  * \param tracker A valid \ref PSMoveTracker handle
- * 
+ *
  * \return A \ref PSMoveTrackerRGBImage describing the RGB data and size.
  *         The RGB data is owned by the tracker, and must not be freed by
  *         the caller. The return value is valid only for the lifetime of

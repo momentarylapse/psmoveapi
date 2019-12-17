@@ -33,8 +33,7 @@
 #include <time.h>
 #include <assert.h>
 
-#include "opencv2/core/core_c.h"
-#include "opencv2/highgui/highgui_c.h"
+#include <opencv2/opencv.hpp>
 
 #include "psmove.h"
 #include "psmove_tracker.h"
@@ -51,7 +50,6 @@ int main(int arg, char** args) {
 
     PSMove **controllers = (PSMove **)calloc(count, sizeof(PSMove *));
 
-    void *frame;
     int result;
 
     fprintf(stderr, "Trying to init PSMoveTracker...");
@@ -91,14 +89,14 @@ int main(int arg, char** args) {
         }
     }
 
-    while ((cvWaitKey(1) & 0xFF) != 27) {
+    while ((cv::waitKey(1) & 0xFF) != 27) {
         psmove_tracker_update_image(tracker);
         psmove_tracker_update(tracker, NULL);
         psmove_tracker_annotate(tracker);
 
-        frame = psmove_tracker_get_frame(tracker);
-        if (frame) {
-            cvShowImage("live camera feed", frame);
+        auto frame = psmove_tracker_get_frame2(tracker);
+        if (frame.data) {
+			cv::imshow("live camera feed", frame);
         }
 
         for (i=0; i<count; i++) {
@@ -123,4 +121,3 @@ int main(int arg, char** args) {
     free(controllers);
     return 0;
 }
-
