@@ -88,21 +88,6 @@ void print_color(cv::Scalar &s, const char *name = "?") {
 
 
 
-/**
- * Syntactic sugar - iterate over all valid controllers of a tracker
- *
- * Usage example:
- *
- *    TrackedController *tc;
- *    for_each_controller (tracker, tc) {
- *        // do something with "tc" here
- *    }
- *
- **/
-#define for_each_controller(tracker, var) \
-    for (var=tracker->controllers; var<tracker->controllers+PSMOVE_TRACKER_MAX_CONTROLLERS; var++) \
-        if (var->move)
-
 struct _TrackedController {
     /* Move controller, or NULL if free slot */
     PSMove* move;
@@ -192,7 +177,7 @@ struct _PSMoveTracker {
     // Parameters for psmove_tracker_distance_from_radius()
     struct PSMoveTracker_DistanceParameters distance_parameters;
 
-    TrackedController controllers[PSMOVE_TRACKER_MAX_CONTROLLERS]; // controller data
+    std::vector<TrackedController*> controllers; // controller data
 
     struct ColorMappingRingBuffer color_mapping; // remembered color mappings
 
@@ -731,8 +716,7 @@ psmove_tracker_enable(PSMoveTracker *tracker, PSMove *move)
     psmove_return_val_if_fail(move != NULL, Tracker_CALIBRATION_ERROR);
 
     // Switch off the controller and all others while enabling another one
-    TrackedController *tc;
-    for_each_controller(tracker, tc) {
+    for (auto *tc: tracker->controllers) {
         psmove_set_leds(tc->move, 0, 0, 0);
         psmove_update_leds(tc->move);
     }
@@ -861,6 +845,7 @@ enum PSMoveTracker_Status
 psmove_tracker_enable_with_color(PSMoveTracker *tracker, PSMove *move,
         unsigned char r, unsigned char g, unsigned char b)
 {
+	BLOCK("psmove_tracker_enable_with_color");
     psmove_return_val_if_fail(tracker != NULL, Tracker_CALIBRATION_ERROR);
     psmove_return_val_if_fail(move != NULL, Tracker_CALIBRATION_ERROR);
 
@@ -892,8 +877,7 @@ psmove_tracker_blinking_calibration(PSMoveTracker *tracker, PSMove *move,
     assert(frame.data != NULL);
 
     // Switch off all other controllers for better measurements
-    TrackedController *tc;
-    for_each_controller(tracker, tc) {
+    for (auto *tc: tracker->controllers) {
         psmove_set_leds(tc->move, 0, 0, 0);
         psmove_update_leds(tc->move);
     }
@@ -1028,6 +1012,7 @@ enum PSMoveTracker_Status
 psmove_tracker_enable_with_color_internal(PSMoveTracker *tracker, PSMove *move,
         struct PSMove_RGBValue rgb)
 {
+	BLOCK("psmove_tracker_enable_with_color_internal");
     // check if the controller is already enabled!
     if (psmove_tracker_find_controller(tracker, move)) {
         return Tracker_CALIBRATED;
@@ -1047,7 +1032,7 @@ psmove_tracker_enable_with_color_internal(PSMoveTracker *tracker, PSMove *move,
     cv::Scalar hsv_color;
     if (psmove_tracker_blinking_calibration(tracker, move, rgb, &color, &hsv_color)) {
         // Find the next free slot to use as TrackedController
-        TrackedController *tc = psmove_tracker_find_controller(tracker, NULL);
+        auto *tc = new TrackedController();
 
         if (tc != NULL) {
             tc->move = move;
@@ -1058,6 +1043,7 @@ psmove_tracker_enable_with_color_internal(PSMoveTracker *tracker, PSMove *move,
             tc->eColor = tc->eFColor = color;
             tc->eColorHSV = tc->eFColorHSV = hsv_color;
 
+			tracker->controllers.push_back(tc);
             return Tracker_CALIBRATED;
         }
     }
@@ -1142,12 +1128,10 @@ psmove_tracker_disable(PSMoveTracker *tracker, PSMove *move)
     TrackedController *tc = psmove_tracker_find_controller(tracker, move);
 
     if (tc) {
-        // Clear the tracked controller state - also sets move = NULL
-        memset(tc, 0, sizeof(TrackedController));
-
-        // XXX: If we "defrag" tracker->controllers to avoid holes with NULL
-        // controllers, we can simplify psmove_tracker_find_controller() and
-        // abort search at the first encounter of a NULL controller
+		for (unsigned int i=0; i<tracker->controllers.size(); i++)
+			if (tracker->controllers[i] == tc)
+				tracker->controllers.erase(tracker->controllers.begin() + i);
+		delete tc;
     }
 }
 
@@ -1458,8 +1442,7 @@ psmove_tracker_update(PSMoveTracker *tracker, PSMove *move)
 
     long started = psmove_util_get_ticks();
 
-    TrackedController *tc;
-    for_each_controller(tracker, tc) {
+    for (auto *tc: tracker->controllers) {
         if (move == NULL || tc->move == move) {
             spheres_found += psmove_tracker_update_controller(tracker, tc);
         }
@@ -1534,8 +1517,7 @@ psmove_tracker_adapt_to_light(PSMoveTracker *tracker, float target_luminance)
     float step_size = (maximum_exposure - minimum_exposure) / 4.0f;
 
     // Switch off the controllers' LEDs for proper environment measurements
-    TrackedController *tc;
-    for_each_controller(tracker, tc) {
+    for (auto *tc: tracker->controllers) {
         psmove_set_leds(tc->move, 0, 0, 0);
         psmove_update_leds(tc->move);
     }
@@ -1576,10 +1558,9 @@ psmove_tracker_find_controller(PSMoveTracker *tracker, PSMove *move)
 {
     psmove_return_val_if_fail(tracker != NULL, NULL);
 
-    int i;
-    for (i=0; i<PSMOVE_TRACKER_MAX_CONTROLLERS; i++) {
-        if (tracker->controllers[i].move == move) {
-            return &(tracker->controllers[i]);
+	for (auto *tc: tracker->controllers) {
+        if (tc->move == move) {
+            return tc;
         }
 
         // XXX: Assuming a "defragmented" list of controllers, we could stop our
@@ -1679,8 +1660,7 @@ void psmove_tracker_annotate(PSMoveTracker* tracker) {
 
 
     // draw all/one controller information to camera image
-    TrackedController *tc;
-    for_each_controller(tracker, tc) {
+    for (auto *tc: tracker->controllers) {
         if (tc->is_tracked) {
             // controller specific statistics
             p.x = (int)tc->x;
@@ -1855,8 +1835,7 @@ psmove_tracker_color_is_used(PSMoveTracker *tracker, struct PSMove_RGBValue colo
 {
     psmove_return_val_if_fail(tracker != NULL, 1);
 
-    TrackedController *tc;
-    for_each_controller(tracker, tc) {
+    for (auto *tc: tracker->controllers) {
         if (memcmp(&tc->color, &color, sizeof(struct PSMove_RGBValue)) == 0) {
             return 1;
         }
