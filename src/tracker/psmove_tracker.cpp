@@ -85,12 +85,8 @@ void print_color(cv::Scalar &s, const char *name = "?") {
 	printf("Scalar %s:  %f %f  %f  %f\n", name, s[0], s[1], s[2], s[3]);
 }
 
-#define FAKE 0
-
-#define xprintf(s) // printf(s)
 
 
-using namespace cv;
 
 /**
  * Syntactic sugar - iterate over all valid controllers of a tracker
@@ -114,11 +110,11 @@ struct _TrackedController {
     /* Assigned RGB color of the controller */
     struct PSMove_RGBValue color;
 
-    Scalar eFColor;			// first estimated color (BGR)
-    Scalar eFColorHSV;		// first estimated color (HSV)
+    cv::Scalar eFColor;			// first estimated color (BGR)
+    cv::Scalar eFColorHSV;		// first estimated color (HSV)
 
-    Scalar eColor;			// estimated color (BGR)
-    Scalar eColorHSV; 		// estimated color (HSV)
+    cv::Scalar eColor;			// estimated color (BGR)
+    cv::Scalar eColorHSV; 		// estimated color (HSV)
 
     int roi_x, roi_y;			// x/y - Coordinates of the ROI
     int roi_level; 	 			// the current index for the level of ROI
@@ -186,12 +182,12 @@ struct _PSMoveTracker {
 
     PSMoveTrackerSettings settings;  // Camera and tracker algorithm settings. Generally do not change after startup & calibration.
 
-    Mat frame; // the current frame of the camera
-    Mat frame_rgb; // the frame as tightly packed RGB data
-    Mat roiI[ROIS]; // array of images for each level of roi (colored)
-    Mat roiM[ROIS]; // array of images for each level of roi (greyscale)
-    Mat kCalib;
-    Scalar rHSV; // the range of the color filter
+    cv::Mat frame; // the current frame of the camera
+    cv::Mat frame_rgb; // the frame as tightly packed RGB data
+    cv::Mat roiI[ROIS]; // array of images for each level of roi (colored)
+    cv::Mat roiM[ROIS]; // array of images for each level of roi (greyscale)
+    cv::Mat kCalib;
+    cv::Scalar rHSV; // the range of the color filter
 
     // Parameters for psmove_tracker_distance_from_radius()
     struct PSMoveTracker_DistanceParameters distance_parameters;
@@ -200,7 +196,7 @@ struct _PSMoveTracker {
 
     struct ColorMappingRingBuffer color_mapping; // remembered color mappings
 
-    std::vector<std::vector<Point> > contours;
+    //std::vector<std::vector<cv::Point> > contours;
     long duration; // duration of tracking operation, in ms
 
     // internal variables (debug)
@@ -353,13 +349,13 @@ psmove_tracker_old_color_is_tracked(PSMoveTracker* tracker, PSMove* move, struct
  * Lookup a camera-visible color value
  **/
 int
-psmove_tracker_lookup_color(PSMoveTracker *tracker, struct PSMove_RGBValue rgb, Scalar *color);
+psmove_tracker_lookup_color(PSMoveTracker *tracker, struct PSMove_RGBValue rgb, cv::Scalar &color);
 
 /**
  * Remember a color value after calibration
  **/
 void
-psmove_tracker_remember_color(PSMoveTracker *tracker, struct PSMove_RGBValue rgb, Scalar color);
+psmove_tracker_remember_color(PSMoveTracker *tracker, struct PSMove_RGBValue rgb, cv::Scalar &color);
 
 // -------- END: internal functions only
 
@@ -557,9 +553,9 @@ PSMoveTracker *
 psmove_tracker_new_with_camera_and_settings(int camera, PSMoveTrackerSettings *settings) {
 	BLOCK("psmove_tracker_new_with_camera_and_settings");
 
-    PSMoveTracker* tracker = (PSMoveTracker*) calloc(1, sizeof(PSMoveTracker));
+    PSMoveTracker* tracker = new PSMoveTracker();
     tracker->settings = *settings;
-    tracker->rHSV = Scalar(
+    tracker->rHSV = cv::Scalar(
         tracker->settings.color_hue_filter_range,
         tracker->settings.color_saturation_filter_range,
         tracker->settings.color_value_filter_range, 0);
@@ -697,8 +693,8 @@ psmove_tracker_new_with_camera_and_settings(int camera, PSMoveTrackerSettings *s
 	for (i = 0; i < ROIS; i++) {
 //		tracker->roiI[i] = cvCreateImage(cvSize(w,h), frame->depth, 3);
 //		tracker->roiM[i] = cvCreateImage(cvSize(w,h), frame->depth, 1);
-		tracker->roiI[i].create(Size(w,h), CV_8UC3);
-		tracker->roiM[i].create(Size(w,h), CV_8UC1);
+		tracker->roiI[i].create(cv::Size(w,h), CV_8UC3);
+		tracker->roiM[i].create(cv::Size(w,h), CV_8UC1);
 
 		/* Smaller rois are always square, and 70% of the previous level */
 		h = w = (int)(MIN(w,h) * 0.7f);
@@ -708,7 +704,7 @@ psmove_tracker_new_with_camera_and_settings(int camera, PSMoveTrackerSettings *s
 	int ks = 5; // Kernel Size
 	int kc = (ks + 1) / 2; // Kernel Center
 //	tracker->kCalib = cvCreateStructuringElementEx(ks, ks, kc, kc, CV_SHAPE_RECT, NULL);
-	tracker->kCalib = getStructuringElement(MORPH_RECT, Size(ks, ks), Point(kc, kc));
+	tracker->kCalib = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(ks, ks), cv::Point(kc, kc));
 
 #if defined(__APPLE__) && !defined(CAMERA_CONTROL_USE_PS3EYE_DRIVER)
     printf("Move the controller away and press the Move button\n");
@@ -766,10 +762,9 @@ psmove_tracker_enable(PSMoveTracker *tracker, PSMove *move)
 int
 psmove_tracker_old_color_is_tracked(PSMoveTracker* tracker, PSMove* move, struct PSMove_RGBValue rgb)
 {
-	BLOCK("psmove_tracker_old_color_is_tracked");
-    Scalar color;
+    cv::Scalar color;
 
-    if (!psmove_tracker_lookup_color(tracker, rgb, &color)) {
+    if (!psmove_tracker_lookup_color(tracker, rgb, color)) {
         return 0;
     }
 
@@ -809,9 +804,8 @@ psmove_tracker_old_color_is_tracked(PSMoveTracker* tracker, PSMove* move, struct
 }
 
 int
-psmove_tracker_lookup_color(PSMoveTracker *tracker, struct PSMove_RGBValue rgb, Scalar *color)
+psmove_tracker_lookup_color(PSMoveTracker *tracker, struct PSMove_RGBValue rgb, cv::Scalar &color)
 {
-	BLOCK("psmove_tracker_lookup_color");
     unsigned char current = tracker->color_mapping.next_slot - 1;
     unsigned char dimming = (unsigned char)(255 * tracker->settings.dimming_factor);
 
@@ -820,9 +814,9 @@ psmove_tracker_lookup_color(PSMoveTracker *tracker, struct PSMove_RGBValue rgb, 
                     sizeof(struct PSMove_RGBValue)) == 0 &&
                 tracker->color_mapping.map[current].dimming == dimming) {
             struct PSMove_RGBValue to = tracker->color_mapping.map[current].to;
-            color->val[0] = to.r;
-            color->val[1] = to.g;
-            color->val[2] = to.b;
+            color.val[0] = to.r;
+            color.val[1] = to.g;
+            color.val[2] = to.b;
             return 1;
         }
 
@@ -833,9 +827,8 @@ psmove_tracker_lookup_color(PSMoveTracker *tracker, struct PSMove_RGBValue rgb, 
 }
 
 void
-psmove_tracker_remember_color(PSMoveTracker *tracker, struct PSMove_RGBValue rgb, Scalar color)
+psmove_tracker_remember_color(PSMoveTracker *tracker, struct PSMove_RGBValue rgb, cv::Scalar &color)
 {
-	BLOCK("psmove_tracker_remember_color");
     unsigned char dimming = (unsigned char)(255 * tracker->settings.dimming_factor);
 
     struct PSMove_RGBValue to;
@@ -868,7 +861,6 @@ enum PSMoveTracker_Status
 psmove_tracker_enable_with_color(PSMoveTracker *tracker, PSMove *move,
         unsigned char r, unsigned char g, unsigned char b)
 {
-	BLOCK("psmove_tracker_enable_with_color");
     psmove_return_val_if_fail(tracker != NULL, Tracker_CALIBRATION_ERROR);
     psmove_return_val_if_fail(move != NULL, Tracker_CALIBRATION_ERROR);
 
@@ -878,9 +870,8 @@ psmove_tracker_enable_with_color(PSMoveTracker *tracker, PSMove *move,
 
 enum PSMove_Bool
 psmove_tracker_blinking_calibration(PSMoveTracker *tracker, PSMove *move,
-        struct PSMove_RGBValue rgb, Scalar *color, Scalar *hsv_color)
+        struct PSMove_RGBValue rgb, cv::Scalar *color, cv::Scalar *hsv_color)
 {
-	BLOCK("psmove_tracker_blinking_calibration");
     char *color_str = psmove_util_get_env_string(PSMOVE_TRACKER_COLOR_ENV);
     if (color_str != NULL) {
         int r, g, b;
@@ -897,7 +888,7 @@ psmove_tracker_blinking_calibration(PSMoveTracker *tracker, PSMove *move,
     }
 
     psmove_tracker_update_image(tracker);
-    Mat frame = tracker->frame;
+    cv::Mat frame = tracker->frame;
     assert(frame.data != NULL);
 
     // Switch off all other controllers for better measurements
@@ -976,10 +967,10 @@ psmove_tracker_blinking_calibration(PSMoveTracker *tracker, PSMove *move,
     int valid_countours = 0;
 
     // calculate upper & lower bounds for the color filter
-    Scalar min = th_scalar_sub(*hsv_color, tracker->rHSV);
-    Scalar max = th_scalar_add(*hsv_color, tracker->rHSV);
+    cv::Scalar min = th_scalar_sub(*hsv_color, tracker->rHSV);
+    cv::Scalar max = th_scalar_add(*hsv_color, tracker->rHSV);
 
-    Point firstPosition;
+    cv::Point firstPosition;
     for (i=0; i<BLINKS; i++) {
         // Convert to HSV, then apply the color range filter to the mask
         cv::cvtColor(images[i], images[i], cv::COLOR_BGR2HSV);
@@ -1037,7 +1028,6 @@ enum PSMoveTracker_Status
 psmove_tracker_enable_with_color_internal(PSMoveTracker *tracker, PSMove *move,
         struct PSMove_RGBValue rgb)
 {
-	BLOCK("psmove_tracker_enable_with_color_internal");
     // check if the controller is already enabled!
     if (psmove_tracker_find_controller(tracker, move)) {
         return Tracker_CALIBRATED;
@@ -1053,8 +1043,8 @@ psmove_tracker_enable_with_color_internal(PSMoveTracker *tracker, PSMove *move,
         return Tracker_CALIBRATED;
     }
 
-    Scalar color;
-    Scalar hsv_color;
+    cv::Scalar color;
+    cv::Scalar hsv_color;
     if (psmove_tracker_blinking_calibration(tracker, move, rgb, &color, &hsv_color)) {
         // Find the next free slot to use as TrackedController
         TrackedController *tc = psmove_tracker_find_controller(tracker, NULL);
@@ -1079,7 +1069,6 @@ int
 psmove_tracker_get_color(PSMoveTracker *tracker, PSMove *move,
         unsigned char *r, unsigned char *g, unsigned char *b)
 {
-	BLOCK("psmove_tracker_get_color");
     psmove_return_val_if_fail(tracker != NULL, 0);
     psmove_return_val_if_fail(move != NULL, 0);
 
@@ -1100,7 +1089,6 @@ int
 psmove_tracker_get_camera_color(PSMoveTracker *tracker, PSMove *move,
         unsigned char *r, unsigned char *g, unsigned char *b)
 {
-	BLOCK("psmove_tracker_get_camera_color");
     psmove_return_val_if_fail(tracker != NULL, 0);
     psmove_return_val_if_fail(move != NULL, 0);
 
@@ -1121,7 +1109,6 @@ int
 psmove_tracker_set_camera_color(PSMoveTracker *tracker, PSMove *move,
         unsigned char r, unsigned char g, unsigned char b)
 {
-	BLOCK("psmove_tracker_set_camera_color");
     psmove_return_val_if_fail(tracker != NULL, 0);
     psmove_return_val_if_fail(move != NULL, 0);
 
@@ -1167,7 +1154,6 @@ psmove_tracker_disable(PSMoveTracker *tracker, PSMove *move)
 enum PSMoveTracker_Status
 psmove_tracker_get_status(PSMoveTracker *tracker, PSMove *move)
 {
-	BLOCK("psmove_tracker_get_status");
     psmove_return_val_if_fail(tracker != NULL, Tracker_CALIBRATION_ERROR);
     psmove_return_val_if_fail(move != NULL, Tracker_CALIBRATION_ERROR);
 
@@ -1186,20 +1172,17 @@ psmove_tracker_get_status(PSMoveTracker *tracker, PSMove *move)
 
 void*
 psmove_tracker_get_frame(PSMoveTracker *tracker) {
-	BLOCK("psmove_tracker_get_frame");
 	return tracker->frame.data;
 }
 
 cv::Mat
 psmove_tracker_get_frame2(PSMoveTracker *tracker) {
-	BLOCK("psmove_tracker_get_frame2");
 	return tracker->frame;
 }
 
 PSMoveTrackerRGBImage
 psmove_tracker_get_image(PSMoveTracker *tracker)
 {
-	BLOCK("psmove_tracker_get_image");
     PSMoveTrackerRGBImage result = { NULL, 0, 0 };
 
     if (tracker != NULL) {
@@ -1218,7 +1201,6 @@ psmove_tracker_get_image(PSMoveTracker *tracker)
 }
 
 void psmove_tracker_update_image(PSMoveTracker *tracker) {
-	BLOCK("psmove_tracker_update_image");
     psmove_return_if_fail(tracker != NULL);
 
     tracker->frame = camera_control_query_frame(tracker->cc);
@@ -1242,7 +1224,6 @@ void psmove_tracker_update_image(PSMoveTracker *tracker) {
 int
 psmove_tracker_update_controller(PSMoveTracker *tracker, TrackedController *tc)
 {
-	BLOCK("psmove_tracker_update_controller");
     float x, y;
     int i = 0;
     int sphere_found = 0;
@@ -1255,8 +1236,8 @@ psmove_tracker_update_controller(PSMoveTracker *tracker, TrackedController *tc)
     }
 
     // calculate upper & lower bounds for the color filter
-    Scalar min = th_scalar_sub(tc->eColorHSV, tracker->rHSV);
-    Scalar max = th_scalar_add(tc->eColorHSV, tracker->rHSV);
+    cv::Scalar min = th_scalar_sub(tc->eColorHSV, tracker->rHSV);
+    cv::Scalar max = th_scalar_add(tc->eColorHSV, tracker->rHSV);
 
 	// this is the tracking algorithm
 	for (;;) {
@@ -1267,7 +1248,7 @@ psmove_tracker_update_controller(PSMoveTracker *tracker, TrackedController *tc)
 		// adjust the ROI, so that the blob is fully visible, but only if we have a reasonable FPS
         if (tracker->debug_fps > tracker->settings.roi_adjust_fps_t) {
 			// TODO: check for validity differently
-			Point nRoiCenter;
+			cv::Point nRoiCenter;
             if (psmove_tracker_center_roi_on_controller(tc, tracker, nRoiCenter)) {
 				psmove_tracker_set_roi(tracker, tc, nRoiCenter.x, nRoiCenter.y, roi_i.cols, roi_i.rows);
 			}
@@ -1291,12 +1272,11 @@ psmove_tracker_update_controller(PSMoveTracker *tracker, TrackedController *tc)
 		psmove_tracker_biggest_contour(roi_m, contourBest, &sizeBest);
 
 		if (contourBest.size() > 0) {
-			BLOCK("cont");
 			/*for (auto &c: contourBest) {
 				printf("%d %d\n", c.x, c.y);
 			}*/
-			Moments mu; // ImageMoments are use to calculate the center of mass of the blob
-			Rect br = cv::boundingRect(contourBest);
+			// ImageMoments are use to calculate the center of mass of the blob
+			cv::Rect br = cv::boundingRect(contourBest);
 
 			// restore the biggest contour
 			roi_m = cv::viz::Color::black();
@@ -1304,13 +1284,13 @@ psmove_tracker_update_controller(PSMoveTracker *tracker, TrackedController *tc)
 			std::vector<std::vector<cv::Point>> ccc0 = {contourBest};
 			cv::drawContours(roi_m, ccc0, 0, cv::viz::Color::white(), cv::FILLED, cv::LINE_8);
 			// calucalte image-moments
-			mu = cv::moments(roi_m);
+			cv::Moments mu = cv::moments(roi_m);
 			// calucalte the mass center
             cv::Point p = cv::Point((int)(mu.m10 / mu.m00), (int)(mu.m01 / mu.m00));
             cv::Point oldMCenter = cv::Point((int)tc->mx, (int)tc->my);
 			tc->mx = (float)p.x + tc->roi_x;
 			tc->my = (float)p.y + tc->roi_y;
-			Point newMCenter = cv::Point((int)tc->mx, (int)tc->my);
+			cv::Point newMCenter = cv::Point((int)tc->mx, (int)tc->my);
 
 			// remember the old radius and calcutlate the new x/y position and radius of the found contour
 			float oldRadius = tc->r;
@@ -1380,7 +1360,6 @@ psmove_tracker_update_controller(PSMoveTracker *tracker, TrackedController *tc)
 
 			// only if the quality is okay update the future ROI
 			if (sphere_found) {
-				BLOCK("sphere-found");
 				// use adaptive color detection
 				// only if 	1) the sphere has been found
 				// AND		2) the UPDATE_RATE has passed
@@ -1395,7 +1374,6 @@ psmove_tracker_update_controller(PSMoveTracker *tracker, TrackedController *tc)
                     tc->q2 < tracker->settings.color_update_quality_t2 &&
                     tc->q3 > tracker->settings.color_update_quality_t3)
                 {
-					BLOCK("XXX");
 					// calculate the new estimated color (adaptive color estimation)
 					cv::Scalar newColor = cv::mean(frame_roi, roi_m);
 
@@ -1474,7 +1452,6 @@ psmove_tracker_update_controller(PSMoveTracker *tracker, TrackedController *tc)
 int
 psmove_tracker_update(PSMoveTracker *tracker, PSMove *move)
 {
-	BLOCK("psmove_tracker_update");
     psmove_return_val_if_fail(tracker->frame.data != NULL, 0);
 
     int spheres_found = 0;
@@ -1497,7 +1474,6 @@ int
 psmove_tracker_get_position(PSMoveTracker *tracker, PSMove *move,
         float *x, float *y, float *radius)
 {
-	BLOCK("psmove_tracker_get_position");
     psmove_return_val_if_fail(tracker != NULL, 0);
     psmove_return_val_if_fail(move != NULL, 0);
 
@@ -1525,7 +1501,6 @@ void
 psmove_tracker_get_size(PSMoveTracker *tracker,
         int *width, int *height)
 {
-	BLOCK("psmove_tracker_get_size");
     psmove_return_if_fail(tracker != NULL);
     psmove_return_if_fail(tracker->frame.data != NULL);
 
@@ -1536,7 +1511,6 @@ psmove_tracker_get_size(PSMoveTracker *tracker,
 void
 psmove_tracker_free(PSMoveTracker *tracker)
 {
-	BLOCK("psmove_tracker_free");
     psmove_return_if_fail(tracker != NULL);
 
     camera_control_restore_system_settings(tracker->cc, tracker->cc_settings);
@@ -1549,7 +1523,6 @@ psmove_tracker_free(PSMoveTracker *tracker)
 int
 psmove_tracker_adapt_to_light(PSMoveTracker *tracker, float target_luminance)
 {
-	BLOCK("psmove_tracker_adapt_to_light");
     float minimum_exposure = 2051;
     float maximum_exposure = 65535;
     float current_exposure = (maximum_exposure + minimum_exposure) / 2.0f;
@@ -1572,12 +1545,12 @@ psmove_tracker_adapt_to_light(PSMoveTracker *tracker, float target_luminance)
         camera_control_set_parameters(tracker->cc, 0, 0, 0,
                 (int)current_exposure, 0, 0xffff, 0xffff, 0xffff, -1, -1, tracker->settings.camera_mirror);
 
-        Mat frame;
+        cv::Mat frame;
         psmove_tracker_wait_for_frame(tracker, frame, 50);
         assert(frame.data != NULL);
 
         // calculate the average color and luminance (energy)
-        float luminance = (float)th_color_avg(mean(frame));
+        float luminance = (float)th_color_avg(cv::mean(frame));
 
         psmove_DEBUG("Exposure: %.2f, Luminance: %.2f\n", current_exposure, luminance);
         if (fabsf(luminance - target_luminance) < 1) {
@@ -1601,7 +1574,6 @@ psmove_tracker_adapt_to_light(PSMoveTracker *tracker, float target_luminance)
 TrackedController *
 psmove_tracker_find_controller(PSMoveTracker *tracker, PSMove *move)
 {
-	BLOCK("psmove_tracker_find_controller");
     psmove_return_val_if_fail(tracker != NULL, NULL);
 
     int i;
@@ -1622,7 +1594,6 @@ psmove_tracker_find_controller(PSMoveTracker *tracker, PSMove *move)
 void
 psmove_tracker_wait_for_frame(PSMoveTracker *tracker, cv::Mat &frame, int delay)
 {
-	BLOCK("psmove_tracker_wait_for_frame");
     int elapsed_time = 0;
     int step = 10;
 
@@ -1637,9 +1608,7 @@ void psmove_tracker_get_diff(PSMoveTracker* tracker, PSMove* move,
         struct PSMove_RGBValue rgb, cv::Mat &on, cv::Mat &diff, int delay,
         float dimming_factor)
 {
-	BLOCK("psmove_tracker_get_diff");
     // the time to wait for the controller to set the color up
-    cv::Mat frame;
     // switch the LEDs ON and wait for the sphere to be fully lit
 	rgb.r = (unsigned char)(rgb.r * dimming_factor);
 	rgb.g = (unsigned char)(rgb.g * dimming_factor);
@@ -1648,6 +1617,7 @@ void psmove_tracker_get_diff(PSMoveTracker* tracker, PSMove* move,
     psmove_update_leds(move);
 
     // take the first frame (sphere lit)
+    cv::Mat frame;
     psmove_tracker_wait_for_frame(tracker, frame, delay);
     frame.copyTo(on);
 
@@ -1684,7 +1654,6 @@ void psmove_tracker_set_roi(PSMoveTracker* tracker, TrackedController* tc, int r
 }
 
 void psmove_tracker_annotate(PSMoveTracker* tracker) {
-	BLOCK("psmove_tracker_annotate");
 	cv::Point p;
 	cv::Mat frame = tracker->frame;
 
@@ -1698,7 +1667,7 @@ void psmove_tracker_annotate(PSMoveTracker* tracker) {
 	// general statistics
 	avgC = cv::mean(frame);
     avgLum = (float)th_color_avg(avgC);
-	cv::rectangle(frame, cv::Point(0, 0), cv::Point(frame.cols, 25), cv::viz::Color::black(), cv::FILLED, LINE_8, 0);
+	cv::rectangle(frame, cv::Point(0, 0), cv::Point(frame.cols, 25), cv::viz::Color::black(), cv::FILLED, cv::LINE_8, 0);
 	sprintf(text, "fps:%.0f", tracker->debug_fps);
 	cv::putText(frame, text, cv::Point(10, 20), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::viz::Color::white());
     if (tracker->duration) {
@@ -1728,19 +1697,19 @@ void psmove_tracker_annotate(PSMoveTracker* tracker) {
 			if (roi_h == frame.rows)
                 vOff = roi_h;
             sprintf(text, "RGB:%x,%x,%x", (int)c.val[2], (int)c.val[1], (int)c.val[0]);
-            cv::putText(frame, text, cv::Point(tc->roi_x, tc->roi_y + vOff - 5), cv::FONT_HERSHEY_SIMPLEX, 0.6, c);
+            cv::putText(frame, text, cv::Point(tc->roi_x, tc->roi_y + vOff - 5), cv::FONT_HERSHEY_PLAIN, 0.8, c);
 
             sprintf(text, "ROI:%dx%d", roi_w, roi_h);
-            cv::putText(frame, text, cv::Point(tc->roi_x, tc->roi_y + vOff - 15), cv::FONT_HERSHEY_SIMPLEX, 0.6, c);
+            cv::putText(frame, text, cv::Point(tc->roi_x, tc->roi_y + vOff - 15), cv::FONT_HERSHEY_PLAIN, 0.8, c);
 
             double distance = psmove_tracker_distance_from_radius(tracker, tc->r);
 
             sprintf(text, "radius: %.2f", tc->r);
-            cv::putText(frame, text, cv::Point(tc->roi_x, tc->roi_y + vOff - 35), cv::FONT_HERSHEY_SIMPLEX, 0.6, c);
+            cv::putText(frame, text, cv::Point(tc->roi_x, tc->roi_y + vOff - 35), cv::FONT_HERSHEY_PLAIN, 0.8, c);
             sprintf(text, "dist: %.2f cm", distance);
-            cv::putText(frame, text, cv::Point(tc->roi_x, tc->roi_y + vOff - 25), cv::FONT_HERSHEY_SIMPLEX, 0.6, c);
+            cv::putText(frame, text, cv::Point(tc->roi_x, tc->roi_y + vOff - 25), cv::FONT_HERSHEY_PLAIN, 0.8, c);
 
-            cv::circle(frame, p, (int)tc->r, viz::Color::white(), 1, 8, 0);
+            cv::circle(frame, p, (int)tc->r, cv::viz::Color::white(), 1, 8, 0);
         } else {
             roi_w = tracker->roiI[tc->roi_level].cols;
             roi_h = tracker->roiI[tc->roi_level].rows;
@@ -1757,27 +1726,25 @@ float psmove_tracker_hsvcolor_diff(TrackedController* tc) {
 	return diff;
 }
 
-void psmove_tracker_biggest_contour(cv::Mat &img, std::vector<Point> &resContour, float* resSize) {
-	BLOCK("psmove_tracker_biggest_contour");
-    std::vector<std::vector<Point> > contours0;
-    std::vector<Vec4i> hierarchy;
-    findContours(img, contours0, hierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
+void psmove_tracker_biggest_contour(cv::Mat &img, std::vector<cv::Point> &resContour, float* resSize) {
+	std::vector<std::vector<cv::Point> > contours0;
+	std::vector<cv::Vec4i> hierarchy;
+	findContours(img, contours0, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
 
-    *resSize = 0;
+	*resSize = 0;
 
 	for (auto &c: contours0) {
-        float f = (float)cv::contourArea(c, false);
-        if (f > *resSize) {
-            *resSize = f;
-            resContour = c;
-        }
-    }
+		float f = (float)cv::contourArea(c, false);
+		if (f > *resSize) {
+			*resSize = f;
+			resContour = c;
+		}
+	}
 }
 
 void
 psmove_tracker_estimate_circle_from_contour(std::vector<cv::Point> &cont, float *x, float *y, float* radius)
 {
-	BLOCK("psmove_tracker_estimate_circle_from_contour");
     psmove_return_if_fail(cont.size() > 0);
     psmove_return_if_fail(x != NULL && y != NULL && radius != NULL);
 
@@ -1814,7 +1781,6 @@ psmove_tracker_estimate_circle_from_contour(std::vector<cv::Point> &cont, float 
 int
 psmove_tracker_center_roi_on_controller(TrackedController* tc, PSMoveTracker* tracker, cv::Point &center)
 {
-	BLOCK("psmove_tracker_center_roi_on_controller");
     psmove_return_val_if_fail(tc != NULL, 0);
     psmove_return_val_if_fail(tracker != NULL, 0);
 
@@ -1836,7 +1802,7 @@ psmove_tracker_center_roi_on_controller(TrackedController* tc, PSMoveTracker* tr
 	if (contourBest.size() > 0) {
 		roi_m = cv::viz::Color::black();
 		std::vector<std::vector<cv::Point>> ccc0 = {contourBest};
-		cv::drawContours(roi_m, ccc0, 0, cv::viz::Color::white(), FILLED, LINE_8);
+		cv::drawContours(roi_m, ccc0, 0, cv::viz::Color::white(), cv::FILLED, cv::LINE_8);
 		// calucalte image-moments to estimate the better ROI center
 		cv::Moments mu = cv::moments(roi_m, false);
 
@@ -1851,7 +1817,6 @@ psmove_tracker_center_roi_on_controller(TrackedController* tc, PSMoveTracker* tr
 float
 psmove_tracker_distance_from_radius(PSMoveTracker *tracker, float radius)
 {
-	BLOCK("psmove_tracker_distance_from_radius");
     psmove_return_val_if_fail(tracker != NULL, 0.);
 
     double height = (double)tracker->distance_parameters.height;
@@ -1876,7 +1841,6 @@ void
 psmove_tracker_set_distance_parameters(PSMoveTracker *tracker,
         float height, float center, float hwhm, float shape)
 {
-	BLOCK("psmove_tracker_set_distance_parameters");
     psmove_return_if_fail(tracker != NULL);
 
     tracker->distance_parameters.height = height;
@@ -1889,7 +1853,6 @@ psmove_tracker_set_distance_parameters(PSMoveTracker *tracker,
 int
 psmove_tracker_color_is_used(PSMoveTracker *tracker, struct PSMove_RGBValue color)
 {
-	BLOCK("psmove_tracker_color_is_used");
     psmove_return_val_if_fail(tracker != NULL, 1);
 
     TrackedController *tc;
