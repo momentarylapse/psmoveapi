@@ -27,7 +27,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  **/
 
-#include "opencv2/core/core_c.h"
+//#include "opencv2/core/core_c.h"
+#include <opencv2/opencv.hpp>
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,7 +57,7 @@ void
 camera_control_set_deinterlace(CameraControl *cc,
         enum PSMove_Bool enabled);
 
-IplImage *
+cv::Mat
 camera_control_query_frame(CameraControl* cc);
 
 void

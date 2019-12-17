@@ -30,10 +30,14 @@
  **/
 
 
-#include "opencv2/core/core_c.h"
+/*#include "opencv2/core/core_c.h"
 #include "opencv2/highgui/highgui_c.h"
 #include "opencv2/imgproc/imgproc_c.h"
-#include "opencv2/videoio/videoio_c.h"
+#include "opencv2/videoio/videoio_c.h"*/
+#include <opencv2/opencv.hpp>
+#include <opencv2/videoio.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 #if defined(WIN32)
 #    include <windows.h>
@@ -45,19 +49,22 @@
 #    include "ps3eye_capi.h"
 #endif
 
-struct _CameraControl {
+class _CameraControl {
+public:
 	int cameraID;
-	IplImage* frame3chUndistort;
+	cv::Mat frame3chUndistort;
 
 #if defined(CAMERA_CONTROL_USE_PS3EYE_DRIVER)
         ps3eye_t *eye;
-        IplImage *framebgr;
+        cv::Mat framebgr;
 #endif
 
-	CvCapture* capture;
+	cv::VideoCapture* capture;
 
-	IplImage* mapx;
-	IplImage* mapy;
+	cv::Mat mapx;
+	cv::Mat mapy;
+	cv::Mat camera_matrix;
+	cv::Mat distortion_coeffs;
 
         int width;
         int height;

@@ -209,7 +209,7 @@ psmove_tracker_find_controller(PSMoveTracker *tracker, PSMove *move);
  * delay - The delay to wait for the frame
  **/
 void
-psmove_tracker_wait_for_frame(PSMoveTracker *tracker, IplImage **frame, int delay);
+psmove_tracker_wait_for_frame(PSMoveTracker *tracker, cv::Mat *frame, int delay);
 
 /**
  * This function switches the sphere of the given PSMove on to the given color and takes
@@ -227,7 +227,7 @@ psmove_tracker_wait_for_frame(PSMoveTracker *tracker, IplImage **frame, int dela
  **/
 void
 psmove_tracker_get_diff(PSMoveTracker* tracker, PSMove* move,
-        struct PSMove_RGBValue rgb, IplImage* on, IplImage* diff, int delay,
+        struct PSMove_RGBValue rgb, cv::Mat &on, cv::Mat &diff, int delay,
         float dimming_factor);
 
 /**
@@ -258,7 +258,7 @@ int psmove_tracker_update_controller(PSMoveTracker* tracker, TrackedController *
  *  resContour 	- (out) points to the biggest contour found within the image
  *  resSize 	- (out)	the size of that contour in px\B2
  */
-void psmove_tracker_biggest_contour(IplImage* img, CvMemStorage* stor, CvSeq** resContour, float* resSize);
+void psmove_tracker_biggest_contour(cv::Mat &img, std::vector<cv::Point> &resContour, float* resSize);
 
 /*
  * This returns a subjective distance between the first estimated (during calibration process) color and the currently estimated color.
@@ -282,7 +282,7 @@ float psmove_tracker_hsvcolor_diff(TrackedController* tc);
  * radius	- (out) The radius of the contour that is calculated here.
  */
 void
-psmove_tracker_estimate_circle_from_contour(CvSeq* cont, float *x, float *y, float* radius);
+psmove_tracker_estimate_circle_from_contour(std::vector<cv::Point> &cont, float *x, float *y, float* radius);
 
 /*
  * This function return a optimal ROI center point for a given Tracked controller.
@@ -297,7 +297,7 @@ psmove_tracker_estimate_circle_from_contour(CvSeq* cont, float *x, float *y, flo
  * Returns: nonzero if a new point was found, zero otherwise
  */
 int
-psmove_tracker_center_roi_on_controller(TrackedController* tc, PSMoveTracker* tracker, CvPoint *center);
+psmove_tracker_center_roi_on_controller(TrackedController* tc, PSMoveTracker* tracker, cv::Point &center);
 
 int
 psmove_tracker_color_is_used(PSMoveTracker *tracker, struct PSMove_RGBValue color);
@@ -650,8 +650,8 @@ xprintf("AAA12 g\n");
 
     // just query a frame so that we know the camera works
 #if 0
-    IplImage* frame = NULL;
-	while (!frame) {
+    cv::Mat frame;
+	while (!frame.data) {
 		frame = camera_control_query_frame(tracker->cc);
     }
     xprintf("AAA12 i\n");
@@ -662,7 +662,7 @@ xprintf("AAA12 g\n");
     int size = psmove_util_get_env_int(PSMOVE_TRACKER_ROI_SIZE_ENV);
 
     if (size == -1) {
-        size = MIN(frame->width, frame->height) / 2;
+        size = MIN(frame->size[0], frame->size[1]) / 2;
     } else {
         psmove_DEBUG("Using ROI size: %d\n", size);
     }
@@ -936,7 +936,7 @@ xprintf("AAA21\n");
     }
     double sizes[BLINKS]; // array of blob sizes saved during calibration for estimation of sphere color
     float sizeBest = 0;
-    CvSeq *contourBest = NULL;
+    std::vector<cv::Point> contourBest;
 
     float dimming = 1.0;
     if (tracker->settings.dimming_factor > 0) {
@@ -964,9 +964,9 @@ xprintf("AAA21\n");
         }
 
         // find the biggest contour and repaint the blob where the sphere is expected
-        psmove_tracker_biggest_contour(diffs[0], tracker->storage, &contourBest, &sizeBest);
+        psmove_tracker_biggest_contour(diffs[0], contourBest, &sizeBest);
         mask.setTo(Scalar(0));//cvSet(mask, TH_COLOR_BLACK, NULL);
-        if (contourBest) {
+        if (contourBest.size() > 0) {
             drawContours
             cvDrawContours(mask, contourBest, TH_COLOR_WHITE, TH_COLOR_WHITE, -1, CV_FILLED, 8, cvPoint(0, 0));
         }
@@ -976,7 +976,7 @@ xprintf("AAA21\n");
         *hsv_color = th_brg2hsv(*color);
         psmove_DEBUG("Dimming: %.2f, H: %.2f, S: %.2f, V: %.2f\n", dimming,
                 hsv_color->val[0], hsv_color->val[1], hsv_color->val[2]);
-        
+
         if (tracker->settings.dimming_factor == 0.) {
             if (hsv_color->val[1] > 128) {
                 tracker->settings.dimming_factor = dimming;
@@ -1008,7 +1008,7 @@ xprintf("AAA21\n");
         dilate(mask, mask, tracker->kCalib);
 
         // find the biggest contour in the image and save its location and size
-        psmove_tracker_biggest_contour(mask, tracker->storage, &contourBest, &sizeBest);
+        psmove_tracker_biggest_contour(mask, contourBest, &sizeBest);
         sizes[i] = 0;
         float dist = FLT_MAX;
         CvRect bBox;
@@ -1022,7 +1022,7 @@ xprintf("AAA21\n");
         }
 
         // CHECK for errors (no contour, more than one contour, or contour too small)
-        if (!contourBest) {
+        if (contourBest.size() == 0) {
             // No contour
         } else if (sizes[i] <= tracker->settings.calibration_min_size) {
             // Too small
@@ -1292,8 +1292,8 @@ xprintf("AAA30\n");
 		// adjust the ROI, so that the blob is fully visible, but only if we have a reasonable FPS
         if (tracker->debug_fps > tracker->settings.roi_adjust_fps_t) {
 			// TODO: check for validity differently
-			CvPoint nRoiCenter;
-            if (psmove_tracker_center_roi_on_controller(tc, tracker, &nRoiCenter)) {
+			cv::Point nRoiCenter;
+            if (psmove_tracker_center_roi_on_controller(tc, tracker, nRoiCenter)) {
 				psmove_tracker_set_roi(tracker, tc, nRoiCenter.x, nRoiCenter.y, roi_i->width, roi_i->height);
 			}
 		}
@@ -1307,12 +1307,12 @@ xprintf("AAA30\n");
 
 		// find the biggest contour in the image
 		float sizeBest = 0;
-		CvSeq* contourBest = NULL;
-		psmove_tracker_biggest_contour(roi_m, tracker->storage, &contourBest, &sizeBest);
+		std::vector<cv::Point> contourBest;
+		psmove_tracker_biggest_contour(roi_m, contourBest, &sizeBest);
 
-		if (contourBest) {
+		if (contourBest.size() > 0) {
 			CvMoments mu; // ImageMoments are use to calculate the center of mass of the blob
-			CvRect br = cvBoundingRect(contourBest, 0);
+			cv::Rect br = cv::boundingRect(contourBest);
 
 			// restore the biggest contour
 			cvSet(roi_m, TH_COLOR_BLACK, NULL);
@@ -1595,7 +1595,7 @@ xprintf("AAA35\n");
     }
 
     float step_size = (maximum_exposure - minimum_exposure) / 4.0f;
-    
+
     // Switch off the controllers' LEDs for proper environment measurements
     TrackedController *tc;
     for_each_controller(tracker, tc) {
@@ -1626,7 +1626,7 @@ xprintf("AAA35\n");
         } else {
             current_exposure += step_size;
         }
-        
+
         step_size /= 2.;
     }
 
@@ -1658,7 +1658,7 @@ xprintf("AAA36\n");
 }
 
 void
-psmove_tracker_wait_for_frame(PSMoveTracker *tracker, IplImage **frame, int delay)
+psmove_tracker_wait_for_frame(PSMoveTracker *tracker, cv::Mat &frame, int delay)
 {
 xprintf("AAA37\n");
     int elapsed_time = 0;
@@ -1666,18 +1666,18 @@ xprintf("AAA37\n");
 
     while (elapsed_time < delay) {
         psmove_port_sleep_ms(step);
-        *frame = camera_control_query_frame(tracker->cc);
+        frame = camera_control_query_frame(tracker->cc);
         elapsed_time += step;
     }
 }
 
 void psmove_tracker_get_diff(PSMoveTracker* tracker, PSMove* move,
-        struct PSMove_RGBValue rgb, IplImage* on, IplImage* diff, int delay,
+        struct PSMove_RGBValue rgb, cv::Mat &on, cv::Mat &diff, int delay,
         float dimming_factor)
 {
 xprintf("AAA38\n");
     // the time to wait for the controller to set the color up
-    IplImage* frame;
+    cv::Mat frame;
     // switch the LEDs ON and wait for the sphere to be fully lit
 	rgb.r = (unsigned char)(rgb.r * dimming_factor);
 	rgb.g = (unsigned char)(rgb.g * dimming_factor);
@@ -1686,28 +1686,24 @@ xprintf("AAA38\n");
     psmove_update_leds(move);
 
     // take the first frame (sphere lit)
-    psmove_tracker_wait_for_frame(tracker, &frame, delay);
-    cvCopy(frame, on, NULL);
+    psmove_tracker_wait_for_frame(tracker, frame, delay);
+	frame.copyTo(on);
 
     // switch the LEDs OFF and wait for the sphere to be off
     psmove_set_leds(move, 0, 0, 0);
     psmove_update_leds(move);
 
     // take the second frame (sphere iff)
-    psmove_tracker_wait_for_frame(tracker, &frame, delay);
+    psmove_tracker_wait_for_frame(tracker, frame, delay);
 
     // convert both to grayscale images
-    IplImage* grey1 = cvCloneImage(diff);
-    IplImage* grey2 = cvCloneImage(diff);
-    cvCvtColor(frame, grey1, CV_BGR2GRAY);
-    cvCvtColor(on, grey2, CV_BGR2GRAY);
+    cv::Mat grey1 = diff.clone();
+    cv::Mat grey2 = diff.clone();
+    cv::cvtColor(frame, grey1, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(on, grey2, cv::COLOR_BGR2GRAY);
 
     // calculate the diff of to images and save it in "diff"
-    cvAbsDiff(grey1, grey2, diff);
-
-    // clean up
-    cvReleaseImage(&grey1);
-    cvReleaseImage(&grey2);
+    cv::absdiff(grey1, grey2, diff);
 }
 
 void psmove_tracker_set_roi(PSMoveTracker* tracker, TrackedController* tc, int roi_x, int roi_y, int roi_width, int roi_height) {
@@ -1715,7 +1711,7 @@ xprintf("AAA39\n");
 #if 0
 	tc->roi_x = roi_x;
 	tc->roi_y = roi_y;
-	
+
 	if (tc->roi_x < 0)
 		tc->roi_x = 0;
 	if (tc->roi_y < 0)
@@ -1808,29 +1804,11 @@ xprintf("AAA41\n");
 	return diff;
 }
 
-void psmove_tracker_biggest_contour(IplImage* img, CvMemStorage* stor, CvSeq** resContour, float* resSize) {
-xprintf("AAA42\n");
-    CvSeq* contour;
-    *resSize = 0;
-    *resContour = 0;
-    cvFindContours(img, stor, &contour, sizeof(CvContour), CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE, cvPoint(0, 0));
-
-    for (; contour; contour = contour->h_next) {
-        float f = (float)cvContourArea(contour, CV_WHOLE_SEQ, 0);
-        if (f > *resSize) {
-            *resSize = f;
-            *resContour = contour;
-        }
-    }
-}
-
 void psmove_tracker_biggest_contour(Mat &img, std::vector<Point> &resContour, float* resSize) {
 xprintf("AAA43\n");
     std::vector<std::vector<Point> > contours0;
-    std::vector<Vec4i> hierarchy;
-    findContours(img, contours0, hierarchy, RETR_LIST, CHAIN_APPROX_SIMPLE);
+    findContours(img, contours0, RETR_LIST, CHAIN_APPROX_SIMPLE);
 
-    CvSeq* contour;
     *resSize = 0;
 
 	for (auto &c: contours0) {
@@ -1843,55 +1821,49 @@ xprintf("AAA43\n");
 }
 
 void
-psmove_tracker_estimate_circle_from_contour(CvSeq* cont, float *x, float *y, float* radius)
+psmove_tracker_estimate_circle_from_contour(std::vector<cv::Point> &cont, float *x, float *y, float* radius)
 {
 xprintf("AAA44\n");
-    psmove_return_if_fail(cont != NULL);
+    psmove_return_if_fail(cont.size() > 0);
     psmove_return_if_fail(x != NULL && y != NULL && radius != NULL);
 
-    int i, j;
     float d = 0;
     float cd = 0;
-    CvPoint m1 = cvPoint( 0, 0 );
-    CvPoint m2 = cvPoint( 0, 0 );
-    CvPoint * p1;
-    CvPoint * p2;
-    int found = 0;
+    cv::Point m1 = cv::Point( 0, 0 );
+    cv::Point m2 = cv::Point( 0, 0 );
+    bool found = false;
 
-	int step = MAX(1,cont->total/20);
+	int step = MAX(1,cont.size()/20);
 
 	// compare every two points of the contour (but not more than 20)
 	// to find the most distant pair
-	for (i = 0; i < cont->total; i += step) {
-		p1 = (CvPoint*) cvGetSeqElem(cont, i);
-		for (j = i + 1; j < cont->total; j += step) {
-			p2 = (CvPoint*) cvGetSeqElem(cont, j);
-			cd = (float)th_dist_squared(*p1,*p2);
+	for (unsigned int i = 0; i < cont.size(); i += step) {
+		for (unsigned int j = i + 1; j < cont.size(); j += step) {
+			cd = (float)th_dist_squared(cont[i],cont[j]);
 			if (cd > d) {
 				d = cd;
-				m1 = *p1;
-				m2 = *p2;
-                                found = 1;
+				m1 = cont[i];
+				m2 = cont[j];
+				found = true;
 			}
 		}
 	}
     // calculate center of that pair
     if (found) {
-            *x = 0.5f * (m1.x + m2.x);
-            *y = 0.5f * (m1.y + m2.y);
-    }
-    // calcualte the radius
+		*x = 0.5f * (m1.x + m2.x);
+		*y = 0.5f * (m1.y + m2.y);
+	}
+	// calcualte the radius
 	*radius = (float)sqrt(d) / 2;
 }
 
 int
-psmove_tracker_center_roi_on_controller(TrackedController* tc, PSMoveTracker* tracker, CvPoint *center)
+psmove_tracker_center_roi_on_controller(TrackedController* tc, PSMoveTracker* tracker, cv::Point &center)
 {
 xprintf("AAA44\n");
 #if 0
     psmove_return_val_if_fail(tc != NULL, 0);
     psmove_return_val_if_fail(tracker != NULL, 0);
-    psmove_return_val_if_fail(center != NULL, 0);
 
 	CvScalar min = th_scalar_sub(tc->eColorHSV, tracker->rHSV);
         CvScalar max = th_scalar_add(tc->eColorHSV, tracker->rHSV);
@@ -1905,10 +1877,10 @@ xprintf("AAA44\n");
 
 	// apply color filter
 	cvInRangeS(roi_i, min, max, roi_m);
-	
+
 	float sizeBest = 0;
-	CvSeq* contourBest = NULL;
-	psmove_tracker_biggest_contour(roi_m, tracker->storage, &contourBest, &sizeBest);
+	std::vector<cv::Point> contourBest;
+	psmove_tracker_biggest_contour(roi_m, contourBest, &sizeBest);
 	if (contourBest) {
 		cvSet(roi_m, TH_COLOR_BLACK, NULL);
 		cvDrawContours(roi_m, contourBest, TH_COLOR_WHITE, TH_COLOR_WHITE, -1, CV_FILLED, 8, cvPoint(0, 0));
@@ -1917,13 +1889,13 @@ xprintf("AAA44\n");
 		cvMoments(roi_m, &mu, 0);
 
         *center = cvPoint((int)(mu.m10 / mu.m00), (int)(mu.m01 / mu.m00));
-		center->x += tc->roi_x - roi_m->width / 2;
-		center->y += tc->roi_y - roi_m->height / 2;
+		center.x += tc->roi_x - roi_m->width / 2;
+		center.y += tc->roi_y - roi_m->height / 2;
 	}
 	cvClearMemStorage(tracker->storage);
 	cvResetImageROI(tracker->frame);
 
-        return (contourBest != NULL);
+        return (contourBest.size() > 0);
         #endif
         return 0;
 }
@@ -2498,7 +2470,7 @@ psmove_tracker_blinking_calibration(PSMoveTracker *tracker, PSMove *move,
     }
     double sizes[BLINKS]; // array of blob sizes saved during calibration for estimation of sphere color
     float sizeBest = 0;
-    CvSeq *contourBest = NULL;
+    std::vector<cv::Point> contourBest;
 
     float dimming = 1.0;
     if (tracker->settings.dimming_factor > 0) {
@@ -2526,7 +2498,7 @@ psmove_tracker_blinking_calibration(PSMoveTracker *tracker, PSMove *move,
         }
 
         // find the biggest contour and repaint the blob where the sphere is expected
-        psmove_tracker_biggest_contour(diffs[0], tracker->storage, &contourBest, &sizeBest);
+        psmove_tracker_biggest_contour(diffs[0], contourBest, &sizeBest);
         mask.setTo(Scalar(0));//cvSet(mask, TH_COLOR_BLACK, NULL);
         if (contourBest) {
             drawContours
@@ -2538,7 +2510,7 @@ psmove_tracker_blinking_calibration(PSMoveTracker *tracker, PSMove *move,
         *hsv_color = th_brg2hsv(*color);
         psmove_DEBUG("Dimming: %.2f, H: %.2f, S: %.2f, V: %.2f\n", dimming,
                 hsv_color->val[0], hsv_color->val[1], hsv_color->val[2]);
-        
+
         if (tracker->settings.dimming_factor == 0.) {
             if (hsv_color->val[1] > 128) {
                 tracker->settings.dimming_factor = dimming;
@@ -2570,7 +2542,7 @@ psmove_tracker_blinking_calibration(PSMoveTracker *tracker, PSMove *move,
         dilate(mask, mask, tracker->kCalib);
 
         // find the biggest contour in the image and save its location and size
-        psmove_tracker_biggest_contour(mask, tracker->storage, &contourBest, &sizeBest);
+        psmove_tracker_biggest_contour(mask, contourBest, &sizeBest);
         sizes[i] = 0;
         float dist = FLT_MAX;
         CvRect bBox;
@@ -2854,8 +2826,8 @@ psmove_tracker_update_controller(PSMoveTracker *tracker, TrackedController *tc)
 
 		// find the biggest contour in the image
 		float sizeBest = 0;
-		CvSeq* contourBest = NULL;
-		psmove_tracker_biggest_contour(roi_m, tracker->storage, &contourBest, &sizeBest);
+		std::vector<cv::Point> contourBest;
+		psmove_tracker_biggest_contour(roi_m, contourBest, &sizeBest);
 
 		if (contourBest) {
 			CvMoments mu; // ImageMoments are use to calculate the center of mass of the blob
@@ -3128,7 +3100,7 @@ psmove_tracker_adapt_to_light(PSMoveTracker *tracker, float target_luminance)
     }
 
     float step_size = (maximum_exposure - minimum_exposure) / 4.0f;
-    
+
     // Switch off the controllers' LEDs for proper environment measurements
     TrackedController *tc;
     for_each_controller(tracker, tc) {
@@ -3159,7 +3131,7 @@ psmove_tracker_adapt_to_light(PSMoveTracker *tracker, float target_luminance)
         } else {
             current_exposure += step_size;
         }
-        
+
         step_size /= 2.;
     }
 
@@ -3241,7 +3213,7 @@ void psmove_tracker_get_diff(PSMoveTracker* tracker, PSMove* move,
 void psmove_tracker_set_roi(PSMoveTracker* tracker, TrackedController* tc, int roi_x, int roi_y, int roi_width, int roi_height) {
 	tc->roi_x = roi_x;
 	tc->roi_y = roi_y;
-	
+
 	if (tc->roi_x < 0)
 		tc->roi_x = 0;
 	if (tc->roi_y < 0)
@@ -3329,21 +3301,6 @@ float psmove_tracker_hsvcolor_diff(TrackedController* tc) {
 	return diff;
 }
 
-void psmove_tracker_biggest_contour(IplImage* img, CvMemStorage* stor, CvSeq** resContour, float* resSize) {
-    CvSeq* contour;
-    *resSize = 0;
-    *resContour = 0;
-    cvFindContours(img, stor, &contour, sizeof(CvContour), CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE, cvPoint(0, 0));
-
-    for (; contour; contour = contour->h_next) {
-        float f = (float)cvContourArea(contour, CV_WHOLE_SEQ, 0);
-        if (f > *resSize) {
-            *resSize = f;
-            *resContour = contour;
-        }
-    }
-}
-
 void psmove_tracker_biggest_contour(Mat &img, std::vector<Point> &resContour, float* resSize) {
     std::vector<std::vector<Point> > contours0;
     std::vector<Vec4i> hierarchy;
@@ -3421,7 +3378,7 @@ psmove_tracker_center_roi_on_controller(TrackedController* tc, PSMoveTracker* tr
 
 	// apply color filter
 	cvInRangeS(roi_i, min, max, roi_m);
-	
+
 	float sizeBest = 0;
 	CvSeq* contourBest = NULL;
 	psmove_tracker_biggest_contour(roi_m, tracker->storage, &contourBest, &sizeBest);
@@ -3494,4 +3451,3 @@ psmove_tracker_color_is_used(PSMoveTracker *tracker, struct PSMove_RGBValue colo
 }
 
 #endif
-

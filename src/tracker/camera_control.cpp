@@ -36,7 +36,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-//#include <opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 
 #include "camera_control_private.h"
 
@@ -65,7 +65,7 @@ camera_control_new(int cameraID)
 CameraControl *
 camera_control_new_with_settings(int cameraID, int width, int height, int framerate)
 {
-	CameraControl* cc = (CameraControl*) calloc(1, sizeof(CameraControl));
+	CameraControl* cc = new CameraControl;
 	cc->cameraID = cameraID;
 
     if (framerate <= 0) {
@@ -92,23 +92,24 @@ camera_control_new_with_settings(int cameraID, int width, int height, int framer
         return NULL;
     }
 
+printf("-------error---- TODO: port to opencv 4\n");
     cc->framebgr = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 3);
 #else
     char *video = psmove_util_get_env_string(PSMOVE_TRACKER_FILENAME_ENV);
 
     if (video) {
         psmove_DEBUG("Using '%s' as video input.\n", video);
-        cc->capture = cvCaptureFromFile(video);
+        cc->capture = new cv::VideoCapture(video);
         free(video);
     } else {
-        cc->capture = cvCaptureFromCAM(cc->cameraID);
+        cc->capture = new cv::VideoCapture(cc->cameraID);
 
         if (width <= 0 || height <= 0) {
             get_metrics(&width, &height);
         }
 
-        cvSetCaptureProperty(cc->capture, CV_CAP_PROP_FRAME_WIDTH, width);
-        cvSetCaptureProperty(cc->capture, CV_CAP_PROP_FRAME_HEIGHT, height);
+        cc->capture->set(cv::CAP_PROP_FRAME_WIDTH, width);
+        cc->capture->set(cv::CAP_PROP_FRAME_HEIGHT, height);
     }
 #endif
     cc->width = width;
@@ -143,37 +144,24 @@ void
 camera_control_read_calibration(CameraControl* cc,
         char* intrinsicsFile, char* distortionFile)
 {
- /*   CvMat *intrinsic = (CvMat*) cv::imread(intrinsicsFile, 0);
-    CvMat *distortion = (CvMat*) cv::imread(distortionFile, 0);
+    cc->camera_matrix = cv::imread(intrinsicsFile, 0);
+    cc->distortion_coeffs = cv::imread(distortionFile, 0);
 
-    if (cc->mapx) {
-        cvReleaseImage(&cc->mapx);
-    }
-    if (cc->mapy) {
-        cvReleaseImage(&cc->mapy);
-    }
-
-    if (intrinsic && distortion) {
-        if (!cc->frame3chUndistort) {
-            cc->frame3chUndistort = cvCloneImage(
-                    camera_control_query_frame(cc));
+    if (cc->camera_matrix.data && cc->distortion_coeffs.data) {
+        if (!cc->frame3chUndistort.data) {
+            cc->frame3chUndistort = camera_control_query_frame(cc).clone();
         }
 
-		cc->mapx = cvCreateImage(cvSize(cc->width, cc->height), IPL_DEPTH_32F, 1);
-		cc->mapy = cvCreateImage(cvSize(cc->width, cc->height), IPL_DEPTH_32F, 1);
-
-        cvInitUndistortMap(intrinsic, distortion, cc->mapx, cc->mapy);
-
-        // TODO: Shouldn't we free intrinsic and distortion here?
+		cv::initUndistortRectifyMap(cc->camera_matrix, cc->distortion_coeffs, cv::Mat(), cc->camera_matrix, cv::Size(cc->width, cc->height), CV_32FC1, cc->mapx, cc->mapy);
     } else {
         fprintf(stderr, "Warning: No lens calibration files found.\n");
-    }*/
+    }
 }
 
-IplImage *
+cv::Mat
 camera_control_query_frame( CameraControl* cc)
 {
-    IplImage* result;
+    cv::Mat result;
 
 #if defined(CAMERA_CONTROL_USE_PS3EYE_DRIVER)
     // Get raw data pointer
@@ -185,8 +173,8 @@ camera_control_query_frame( CameraControl* cc)
 
     result = cc->framebgr;
 #else
-    cvGrabFrame(cc->capture);
-    result = cvRetrieveFrame(cc->capture, 0);
+    cc->capture->grab();
+	cc->capture->retrieve(result);
 #endif
 
     if (cc->deinterlace == PSMove_True) {
@@ -195,10 +183,10 @@ camera_control_query_frame( CameraControl* cc)
          *  - Clone image
          *  - Hack internal variables to make an image of all odd lines
          **/
-        IplImage *tmp = cvCloneImage(result);
-        tmp->imageData += tmp->widthStep; // odd lines
-        tmp->widthStep *= 2;
-        tmp->height /= 2;
+        cv::Mat tmp = result.clone();
+        tmp.data += tmp.step[0]; // odd lines
+        tmp.step[0] *= 2;
+        tmp.size[1] /= 2;
 
         /**
          * Use nearest-neighbor to be faster. In my tests, this does not
@@ -207,24 +195,25 @@ camera_control_query_frame( CameraControl* cc)
          * This will scale the half-height image "tmp" to the original frame
          * size by doubling lines (so we can still do normal circle tracking).
          **/
-        cvResize(tmp, result, CV_INTER_NN);
+		cv::resize(tmp, result, result.size(), 0, 0, cv::INTER_NEAREST);
 
         /**
          * Need to revert changes in tmp from above, otherwise the call
          * to cvReleaseImage would cause a crash.
          **/
-        tmp->height = result->height;
-        tmp->widthStep = result->widthStep;
-        tmp->imageData -= tmp->widthStep; // odd lines
-        cvReleaseImage(&tmp);
+        tmp.size[1] = result.size[1];
+        tmp.step[0] = result.step[0];
+        tmp.data -= tmp.step[0]; // odd lines
+		tmp.release();
     }
 
     // undistort image
-    if (cc->mapx && cc->mapy) {
-        cvRemap(result, cc->frame3chUndistort,
+    if (cc->mapx.data && cc->mapy.data) {
+		cv::remap(result, cc->frame3chUndistort,
                 cc->mapx, cc->mapy,
-                CV_INTER_LINEAR | CV_WARP_FILL_OUTLIERS,
-                cvScalarAll(0));
+                cv::INTER_LINEAR | cv::WARP_FILL_OUTLIERS,
+				cv::BORDER_CONSTANT,
+                cv::Scalar(0.0));
         result = cc->frame3chUndistort;
     }
 
@@ -241,27 +230,13 @@ void
 camera_control_delete(CameraControl* cc)
 {
 #if defined(CAMERA_CONTROL_USE_PS3EYE_DRIVER)
-    cvReleaseImage(&cc->framebgr);
 
     ps3eye_close(cc->eye);
     ps3eye_uninit();
 #else
     // linux, others and windows opencv only
-    cvReleaseCapture(&cc->capture);
+    delete cc->capture;
 #endif
 
-    if (cc->frame3chUndistort) {
-        cvReleaseImage(&cc->frame3chUndistort);
-    }
-
-    if (cc->mapx) {
-        cvReleaseImage(&cc->mapx);
-    }
-
-    if (cc->mapy) {
-        cvReleaseImage(&cc->mapy);
-    }
-
-    free(cc);
+    delete cc;
 }
-
