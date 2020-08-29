@@ -36,6 +36,7 @@
 #include <vector>
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/viz/types.hpp>
 
 #include "psmove_tracker.h"
 #include "../psmove_private.h"
